@@ -1,0 +1,138 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+)
+
+type Todo struct {
+	ID     int    `json:"id"`
+	Title  string `json:"title"`
+	Status string `json:"status"`
+}
+
+var todos []Todo
+var currentID int
+
+func main() {
+	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/todos", handleTodos)
+	http.HandleFunc("/todos/", handleTodo)
+
+	fmt.Println("GoTodoList is running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Welcome to GoTodoList!")
+}
+
+func handleTodos(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		getTodos(w, r)
+	case "POST":
+		createTodo(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleTodo(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		getTodoByID(w, r)
+	case "PUT":
+		updateTodoByID(w, r)
+	case "DELETE":
+		deleteTodoByID(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func getTodos(w http.ResponseWriter, r *http.Request) {
+	jsonData, err := json.Marshal(todos)
+	if err != nil {
+		http.Error(w, "Failed to get todos", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
+}
+
+func createTodo(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var todo Todo
+	err = json.Unmarshal(body, &todo)
+	if err != nil {
+		http.Error(w, "Invalid todo data", http.StatusBadRequest)
+		return
+	}
+
+	todo.ID = currentID
+	currentID++
+	todos = append(todos, todo)
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func getTodoByID(w http.ResponseWriter, r *http.Request) {
+	id := getTodoIDFromURL(r.URL.Path)
+	todo, err := findTodoByID(id)
+	if err != nil {
+		http.Error(w, "Todo not found", http.StatusNotFound)
+		return
+	}
+
+	jsonData, err := json.Marshal(todo)
+	if err != nil {
+		http.Error(w, "Failed to get todo", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(jsonData)
+}
+
+func updateTodoByID(w http.ResponseWriter, r *http.Request) {
+	id := getTodoIDFromURL(r.URL.Path)
+	todoIndex, err := findTodoIndexByID(id)
+	if err != nil {
+		http.Error(w, "Todo not found", http.StatusNotFound)
+		return
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var updatedTodo Todo
+	err = json.Unmarshal(body, &updatedTodo)
+	if err != nil {
+		http.Error(w, "Invalid todo data", http.StatusBadRequest)
+		return
+	}
+
+	updatedTodo.ID = id
+	todos[todoIndex] = updatedTodo
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteTodoByID(w http.ResponseWriter, r *http.Request) {
+	id := getTodoIDFromURL(r.URL.Path)
+	todoIndex, err := find
